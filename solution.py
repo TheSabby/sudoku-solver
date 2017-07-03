@@ -1,47 +1,57 @@
+rows = 'ABCDEFGHI'
+cols = '123456789'
+
 assignments = []
 
 def assign_value(values, box, value):
-    """
-    Please use this function to update your values dictionary!
-    Assigns a value to a given box. If it updates the board record it.
-    """
-
     # Don't waste memory appending actions that don't actually change any values
     if values[box] == value:
         return values
-
     values[box] = value
     if len(value) == 1:
         assignments.append(values.copy())
     return values
 
+def cross(a, b):
+    # Cross product of elements in A and elements in B.
+    return [s + t for s in a for t in b]
+
+boxes = cross(rows, cols)
+row_units = [cross(r, cols) for r in rows]
+column_units = [cross(rows, c) for c in cols]
+square_units = [cross(rs, cs) for rs in ('ABC', 'DEF', 'GHI') for cs in ('123', '456', '789')]
+forward_diagonal_unit = [a + b for a,b in list(zip(rows, cols))]
+backward_diagonal_unit = [a + b for a,b in list(zip(rows[::-1], cols))]
+unitlist = row_units + column_units + square_units + [forward_diagonal_unit] + [backward_diagonal_unit]
+# Define all the units for a box
+units = dict((s, [u for u in unitlist if s in u]) for s in boxes)
+# Define all the peers for a box
+peers = dict((s, set(sum(units[s],[]))-set([s])) for s in boxes)
+
 def naked_twins(values):
-    """Eliminate values using the naked twins strategy.
-    Args:
-        values(dict): a dictionary of the form {'box_name': '123456789', ...}
-
-    Returns:
-        the values dictionary with the naked twins eliminated from peers.
-    """
-
-    # Find all instances of naked twins
-    # Eliminate the naked twins as possibilities for their peers
-
-def cross(A, B):
-    "Cross product of elements in A and elements in B."
-    pass
+    for unit in unitlist:
+        # For each unit, find all the boxes with two possible values
+        doubles = [box for box in unit if len(values[box]) == 2]
+        for double in doubles:
+            for peer in peers[double]:
+                # For each box with two possible values find if it has a peer with
+                # the same two possible values
+                if values[peer] == values[double]:
+                    for other_peer in set.intersection(peers[double], peers[peer]):
+                        # For every other peer, eliminate those two values
+                        for i in values[double]:
+                            values = assign_value(values, other_peer, values[other_peer].replace(i, ''))
+    return values
 
 def grid_values(grid):
-    """
-    Convert grid into a dict of {square: char} with '123456789' for empties.
-    Args:
-        grid(string) - A grid in string form.
-    Returns:
-        A grid in dictionary form
-            Keys: The boxes, e.g., 'A1'
-            Values: The value in each box, e.g., '8'. If the box has no value, then the value will be '123456789'.
-    """
-    pass
+    # Convert a string representation of a grid into a dictionary
+    # Substitute all empty boxes ('.') with all possible values for that box ('123456789')
+    grid = list(grid)
+    for i, n in enumerate(grid):
+        if n == '.':
+            grid[i] = '123456789'
+    assert len(grid) == 81
+    return dict(zip(boxes, grid))
 
 def display(values):
     """
@@ -52,26 +62,61 @@ def display(values):
     pass
 
 def eliminate(values):
-    pass
+    for key, value in values.items():
+        if len(value) == 1:
+            for peer in peers[key]:
+                values = assign_value(values, peer, values[peer].replace(value, ''))
+    return values
 
 def only_choice(values):
-    pass
+    for unit in unitlist:
+        for digit in '123456789':
+            # Generate a list of all boxes in that unit that allow for the
+            # number to be stored. If only on box allows for that number then
+            # assign it the number
+            dplaces = [box for box in unit if digit in values[box]]
+            if len(dplaces) == 1:
+                values = assign_value(values, dplaces[0], digit)
+    return values
 
 def reduce_puzzle(values):
-    pass
+    stalled = False
+    while not stalled:
+        # Check how many boxes have a determined value
+        solved_values_before = len([box for box in values.keys() if len(values[box]) == 1])
+        if solved_values_before == 81:
+            break
+        # Use the Eliminate Strategy
+        values = eliminate(values)
+        # Use the Only Choice Strategy
+        values = only_choice(values)
+        # Check how many boxes have a determined value, to compare
+        solved_values_after = len([box for box in values.keys() if len(values[box]) == 1])
+        # If no new values were added, stop the loop.
+        stalled = (solved_values_before == solved_values_after)
+        # Sanity check, return False if there is a box with zero available values:
+        if len([box for box in values.keys() if len(values[box]) == 0]):
+            return False
+    return values
 
 def search(values):
-    pass
+    values = reduce_puzzle(values)
+    if values is False:
+        return False ## Failed earlier
+    if all(len(values[s]) == 1 for s in boxes):
+        return values ## Solved!
+    # Choose one of the unfilled squares with the fewest possibilities
+    n,s = min((len(values[s]), s) for s in boxes if len(values[s]) > 1)
+    # Now use recurrence to solve each one of the resulting sudokus, and
+    for value in values[s]:
+        new_sudoku = values.copy()
+        new_sudoku[s] = value
+        attempt = search(new_sudoku)
+        if attempt:
+            return attempt
 
 def solve(grid):
-    """
-    Find the solution to a Sudoku grid.
-    Args:
-        grid(string): a string representing a sudoku grid.
-            Example: '2.............62....1....7...6..8...3...9...7...6..4...4....8....52.............3'
-    Returns:
-        The dictionary representation of the final sudoku grid. False if no solution exists.
-    """
+    return search(grid_values(grid))
 
 if __name__ == '__main__':
     diag_sudoku_grid = '2.............62....1....7...6..8...3...9...7...6..4...4....8....52.............3'
